@@ -285,7 +285,7 @@ def get_single_response():
                 "notiRegion": login_res.noti_region if login_res.noti_region else "",
                 "ipRegion": login_res.ip_region if login_res.ip_region else "",
                 "agoraEnvironment": login_res.agora_environment if login_res.agora_environment else "",
-                "status": jwt_dict.get("status", "invalid"),
+                "tokenStatus": jwt_dict.get("status", "invalid"),
                 "token": jwt_dict.get("token", ""), 
                 "ttl": login_res.ttl if login_res.ttl else 0,
                 "serverUrl": login_res.server_url if login_res.server_url else "",
