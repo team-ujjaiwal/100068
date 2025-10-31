@@ -91,7 +91,7 @@ def get_single_response():
             "message": "Wrong UID or Password. Please check and try again."
         }), 400
 
-    # Prepare MajorLogin
+    # Prepare MajorLogin object: 
     major_login = MajorLoginReq_pb2.MajorLogin()
     major_login.event_time = "2025-06-04 19:48:07"
     major_login.game_name = "free fire"
@@ -233,12 +233,6 @@ def get_single_response():
                 verify=False
             )
 
-            nickname = ""
-            region = ""
-            level = 0
-            exp = 0
-            create_at = 0
-
             if get_resp.status_code == 200:
                 try:
                     # Decrypt the GetLoginData response
@@ -282,19 +276,18 @@ def get_single_response():
             # Final response
             response_data = {
                 "accountId": login_res.account_id,
-                "nickname": nickname,
-                "region": region,
-                "level": level,
-                "exp": exp,
-                "createAt": create_at,
+                "accountNickname": nickname,
+                "accountRegion": region,
+                "accountLevel": level,
+                "accountExp": exp,
+                "accountCreateAt": create_at,
                 "tokenStatus": jwt_dict.get("status", "invalid"),
                 "token": token,
-                "baseUrl": base_url,
                 "getLoginDataStatus": get_resp.status_code
             }
 
             # Add optional fields if they exist
-            optional_fields = ['lock_region', 'noti_region', 'ip_region', 'agora_environment', 'ttl', 'server_url']
+            optional_fields = ['lockRegion', 'notiRegion', 'ipRegion', 'agoraEnvironment', 'ttl', 'serverUrl']
             for field in optional_fields:
                 if hasattr(login_res, field):
                     value = getattr(login_res, field)
