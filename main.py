@@ -153,9 +153,9 @@ def get_single_response():
     major_login.primary_platform_type = "4"
 
     try:
-    serialized_data = major_login.SerializeToString()
-    encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
-    edata = binascii.hexlify(encrypted_data).decode()
+        serialized_data = major_login.SerializeToString()
+        encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
+        edata = binascii.hexlify(encrypted_data).decode()
 
     url = "https://loginbp.common.ggbluefox.com/MajorLogin"
     headers = {
