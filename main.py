@@ -10,11 +10,11 @@ import jwt_generator_pb2
 import login_pb2
 import json
 import time
-from colorama import init
 import warnings
+from colorama import init
 from urllib3.exceptions import InsecureRequestWarning
 
-# Disable SSL warning
+# Disable SSL warnings
 warnings.filterwarnings("ignore", category=InsecureRequestWarning)
 
 # Constants
@@ -53,16 +53,15 @@ def get_token(password, uid):
         token_json = res.json()
         if "access_token" in token_json and "open_id" in token_json:
             return token_json
-        else:
-            return None
+        return None
     except Exception:
         return None
 
 
 def encrypt_message(key, iv, plaintext):
     cipher = AES.new(key, AES.MODE_CBC, iv)
-    padded_message = pad(plaintext, AES.block_size)
-    return cipher.encrypt(padded_message)
+    padded = pad(plaintext, AES.block_size)
+    return cipher.encrypt(padded)
 
 
 def parse_response(content):
@@ -92,7 +91,7 @@ def get_single_response():
             "message": "Wrong UID or Password. Please check and try again."
         }), 400
 
-    # Create MajorLogin object
+    # Prepare MajorLogin
     major_login = MajorLoginReq_pb2.MajorLogin()
     major_login.event_time = "2025-06-04 19:48:07"
     major_login.game_name = "free fire"
@@ -153,14 +152,13 @@ def get_single_response():
     major_login.primary_platform_type = "4"
 
     try:
-        # Encrypt and send MajorLogin request
-        serialized_data = major_login.SerializeToString()
-        encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
-        edata = binascii.hexlify(encrypted_data).decode()
+        # Encrypt and send MajorLogin
+        serialized = major_login.SerializeToString()
+        encrypted = encrypt_message(AES_KEY, AES_IV, serialized)
+        edata = binascii.hexlify(encrypted).decode()
 
-        url = "https://loginbp.common.ggbluefox.com/MajorLogin"
         headers = {
-            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+            'User-Agent': "Dalvik/2.1.0 (Linux; Android 9)",
             'Connection': "Keep-Alive",
             'Accept-Encoding': "gzip",
             'Content-Type': "application/octet-stream",
@@ -170,21 +168,40 @@ def get_single_response():
             'ReleaseVersion': "OB51"
         }
 
-        response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)
+        response = requests.post(
+            "https://loginbp.common.ggbluefox.com/MajorLogin",
+            data=bytes.fromhex(edata),
+            headers=headers,
+            verify=False
+        )
 
         if response.status_code == 200:
+            # Parse MajorLoginRes
             login_res = MajorLoginRes_pb2.MajorLoginRes()
             login_res.ParseFromString(response.content)
 
-            # GetLoginData call to retrieve nickname, region, etc.
+            # Parse jwt response
+            jwt_msg = jwt_generator_pb2.Garena_420()
+            jwt_msg.ParseFromString(response.content)
+            jwt_dict = parse_response(str(jwt_msg))
+            token = jwt_dict.get("token", "")
+
+            # --- NEW FIX: Proper GetLoginData call with Authorization header ---
             login_req = login_pb2.LoginReq()
             login_req.account_id = login_res.account_id
             serialized_login = login_req.SerializeToString()
             encrypted_login = encrypt_message(AES_KEY, AES_IV, serialized_login)
             login_hex = binascii.hexlify(encrypted_login).decode()
 
-            login_url = "https://loginbp.common.ggbluefox.com/GetLoginData"
-            login_response = requests.post(login_url, data=bytes.fromhex(login_hex), headers=headers, verify=False)
+            get_headers = headers.copy()
+            get_headers["Authorization"] = f"Bearer {token}"
+
+            get_resp = requests.post(
+                "https://loginbp.common.ggbluefox.com/GetLoginData",
+                data=bytes.fromhex(login_hex),
+                headers=get_headers,
+                verify=False
+            )
 
             nickname = ""
             region = ""
@@ -192,53 +209,43 @@ def get_single_response():
             exp = 0
             create_at = 0
 
-            if login_response.status_code == 200:
+            if get_resp.status_code == 200:
                 try:
                     login_info = login_pb2.LoginReq()
-                    login_info.ParseFromString(login_response.content)
+                    login_info.ParseFromString(get_resp.content)
                     nickname = login_info.nickname
                     region = login_info.region
                     level = login_info.level
                     exp = login_info.exp
                     create_at = login_info.create_at
-                except Exception:
-                    pass
+                except Exception as e:
+                    print("Parsing error:", e)
 
-            example_msg = jwt_generator_pb2.Garena_420()
-            example_msg.ParseFromString(response.content)
-            response_dict = parse_response(str(example_msg))
-
-            response_data = {
-                "accountId": login_res.account_id if login_res.account_id else "",
+            # Final response
+            return jsonify({
+                "accountId": login_res.account_id,
                 "nickname": nickname,
                 "region": region,
                 "level": level,
                 "exp": exp,
                 "createAt": create_at,
-                "lockRegion": login_res.lock_region if login_res.lock_region else "",
-                "notiRegion": login_res.noti_region if login_res.noti_region else "",
-                "ipRegion": login_res.ip_region if login_res.ip_region else "",
-                "agoraEnvironment": login_res.agora_environment if login_res.agora_environment else "",
-                "tokenStatus": response_dict.get("status", "invalid"),
-                "token": response_dict.get("token", ""),
-                "ttl": login_res.ttl if login_res.ttl else 0,
-                "serverUrl": login_res.server_url if login_res.server_url else "",
-                "expireAt": int(time.time()) + (login_res.ttl if login_res.ttl else 0)
-            }
+                "lockRegion": login_res.lock_region,
+                "notiRegion": login_res.noti_region,
+                "ipRegion": login_res.ip_region,
+                "agoraEnvironment": login_res.agora_environment,
+                "tokenStatus": jwt_dict.get("status", "invalid"),
+                "token": token,
+                "ttl": login_res.ttl,
+                "serverUrl": login_res.server_url,
+                "expireAt": int(time.time()) + (login_res.ttl or 0)
+            })
 
-            return jsonify(response_data)
         else:
-            return jsonify({
-                "uid": uid,
-                "error": f"Failed to get response: HTTP {response.status_code}, {response.reason}"
-            }), 400
+            return jsonify({"error": f"Failed MajorLogin: {response.status_code}"}), 400
 
     except Exception as e:
-        return jsonify({
-            "uid": uid,
-            "error": f"Internal error occurred: {str(e)}"
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
