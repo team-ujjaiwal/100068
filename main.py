@@ -180,16 +180,37 @@ def get_single_response():
             login_res = MajorLoginRes_pb2.MajorLoginRes()
             login_res.ParseFromString(response.content)
 
+            # Debug: Print all available fields from MajorLoginRes
+            print("Available fields in MajorLoginRes:")
+            for field in login_res.DESCRIPTOR.fields:
+                field_name = field.name
+                field_value = getattr(login_res, field_name, None)
+                print(f"  {field_name}: {field_value}")
+
             # Parse jwt response
             jwt_msg = jwt_generator_pb2.Garena_420()
             jwt_msg.ParseFromString(response.content)
             jwt_dict = parse_response(str(jwt_msg))
             token = jwt_dict.get("token", "")
 
-            # FIXED: Use the correct URL from MajorLogin response
-            base_url = login_res.url  # This is the correct base URL
+            # FIXED: Try different possible field names for URL
+            base_url = None
+            
+            # Try different possible field names
+            possible_url_fields = ['url', 'server_url', 'base_url', 'game_url', 'login_url']
+            
+            for field_name in possible_url_fields:
+                if hasattr(login_res, field_name):
+                    url_value = getattr(login_res, field_name)
+                    if url_value and url_value.strip():
+                        base_url = url_value
+                        print(f"Found URL in field '{field_name}': {base_url}")
+                        break
+            
+            # If no URL found, use a default one
             if not base_url:
-                return jsonify({"error": "No URL received from MajorLogin"}), 400
+                print("No URL field found in response, using default URL")
+                base_url = "https://loginbp.common.ggbluefox.com"
 
             # Prepare LoginReq for GetLoginData
             login_req = login_pb2.LoginReq()
@@ -201,8 +222,9 @@ def get_single_response():
             get_headers = headers.copy()
             get_headers["Authorization"] = f"Bearer {token}"
 
-            # FIXED: Use the correct URL from MajorLogin response
+            # Use the determined URL
             get_login_url = f"{base_url}/GetLoginData"
+            print(f"Using GetLoginData URL: {get_login_url}")
             
             get_resp = requests.post(
                 get_login_url,
@@ -238,6 +260,8 @@ def get_single_response():
                     exp = login_info.exp
                     create_at = login_info.create_at
                     
+                    print(f"Successfully parsed user data: {nickname}, {region}, Level {level}")
+                    
                 except Exception as e:
                     print("Parsing error:", e)
                     # If decryption fails, try parsing directly
@@ -249,28 +273,35 @@ def get_single_response():
                         level = login_info.level
                         exp = login_info.exp
                         create_at = login_info.create_at
+                        print(f"Direct parsing successful: {nickname}, {region}, Level {level}")
                     except Exception as e2:
                         print("Direct parsing also failed:", e2)
+            else:
+                print(f"GetLoginData failed with status: {get_resp.status_code}")
 
             # Final response
-            return jsonify({
+            response_data = {
                 "accountId": login_res.account_id,
                 "nickname": nickname,
                 "region": region,
                 "level": level,
                 "exp": exp,
                 "createAt": create_at,
-                "lockRegion": login_res.lock_region,
-                "notiRegion": login_res.noti_region,
-                "ipRegion": login_res.ip_region,
-                "agoraEnvironment": login_res.agora_environment,
                 "tokenStatus": jwt_dict.get("status", "invalid"),
                 "token": token,
-                "ttl": login_res.ttl,
-                "serverUrl": login_res.server_url,
-                "baseUrl": base_url,  # For debugging
-                "expireAt": int(time.time()) + (login_res.ttl or 0)
-            })
+                "baseUrl": base_url,
+                "getLoginDataStatus": get_resp.status_code
+            }
+
+            # Add optional fields if they exist
+            optional_fields = ['lock_region', 'noti_region', 'ip_region', 'agora_environment', 'ttl', 'server_url']
+            for field in optional_fields:
+                if hasattr(login_res, field):
+                    value = getattr(login_res, field)
+                    if value is not None:
+                        response_data[field] = value
+
+            return jsonify(response_data)
 
         else:
             return jsonify({"error": f"Failed MajorLogin: {response.status_code}"}), 400
