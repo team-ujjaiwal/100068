@@ -186,7 +186,12 @@ def get_single_response():
             jwt_dict = parse_response(str(jwt_msg))
             token = jwt_dict.get("token", "")
 
-            # --- NEW FIX: Proper GetLoginData call with Authorization header ---
+            # FIXED: Use the correct URL from MajorLogin response
+            base_url = login_res.url  # This is the correct base URL
+            if not base_url:
+                return jsonify({"error": "No URL received from MajorLogin"}), 400
+
+            # Prepare LoginReq for GetLoginData
             login_req = login_pb2.LoginReq()
             login_req.account_id = login_res.account_id
             serialized_login = login_req.SerializeToString()
@@ -196,8 +201,11 @@ def get_single_response():
             get_headers = headers.copy()
             get_headers["Authorization"] = f"Bearer {token}"
 
+            # FIXED: Use the correct URL from MajorLogin response
+            get_login_url = f"{base_url}/GetLoginData"
+            
             get_resp = requests.post(
-                "https://loginbp.common.ggbluefox.com/GetLoginData",
+                get_login_url,
                 data=bytes.fromhex(login_hex),
                 headers=get_headers,
                 verify=False
@@ -211,15 +219,38 @@ def get_single_response():
 
             if get_resp.status_code == 200:
                 try:
+                    # Decrypt the GetLoginData response
+                    cipher = AES.new(AES_KEY, AES.MODE_CBC, AES_IV)
+                    decrypted_data = cipher.decrypt(get_resp.content)
+                    
+                    # Remove padding
+                    padding_length = decrypted_data[-1]
+                    if padding_length <= AES.block_size:
+                        decrypted_data = decrypted_data[:-padding_length]
+                    
+                    # Parse the decrypted data
                     login_info = login_pb2.LoginReq()
-                    login_info.ParseFromString(get_resp.content)
+                    login_info.ParseFromString(decrypted_data)
+                    
                     nickname = login_info.nickname
                     region = login_info.region
                     level = login_info.level
                     exp = login_info.exp
                     create_at = login_info.create_at
+                    
                 except Exception as e:
                     print("Parsing error:", e)
+                    # If decryption fails, try parsing directly
+                    try:
+                        login_info = login_pb2.LoginReq()
+                        login_info.ParseFromString(get_resp.content)
+                        nickname = login_info.nickname
+                        region = login_info.region
+                        level = login_info.level
+                        exp = login_info.exp
+                        create_at = login_info.create_at
+                    except Exception as e2:
+                        print("Direct parsing also failed:", e2)
 
             # Final response
             return jsonify({
@@ -237,6 +268,7 @@ def get_single_response():
                 "token": token,
                 "ttl": login_res.ttl,
                 "serverUrl": login_res.server_url,
+                "baseUrl": base_url,  # For debugging
                 "expireAt": int(time.time()) + (login_res.ttl or 0)
             })
 
