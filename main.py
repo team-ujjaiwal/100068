@@ -279,11 +279,10 @@ def get_single_response():
                 "accountNickname": nickname,
                 "accountRegion": region,
                 "accountLevel": level,
-                "accountExp": exp,
+                "accountLevelExp": exp,
                 "accountCreateAt": create_at,
                 "tokenStatus": jwt_dict.get("status", "invalid"),
-                "token": token,
-                "getLoginDataStatus": get_resp.status_code
+                "token": token
             }
 
             # Add optional fields if they exist
