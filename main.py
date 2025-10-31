@@ -7,6 +7,7 @@ import binascii
 import MajorLoginReq_pb2
 import MajorLoginRes_pb2
 import jwt_generator_pb2
+import login_pb2
 import json
 import time
 from colorama import init
@@ -152,6 +153,7 @@ def get_single_response():
     major_login.primary_platform_type = "4"
 
     try:
+        # Encrypt and send MajorLogin request
         serialized_data = major_login.SerializeToString()
         encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
         edata = binascii.hexlify(encrypted_data).decode()
@@ -174,18 +176,40 @@ def get_single_response():
             login_res = MajorLoginRes_pb2.MajorLoginRes()
             login_res.ParseFromString(response.content)
 
+            # GetLoginData call for nickname
+            login_req = login_pb2.LoginReq()
+            login_req.account_id = login_res.account_id
+            login_req.region = login_res.lock_region
+
+            serialized_login = login_req.SerializeToString()
+            encrypted_login = encrypt_message(AES_KEY, AES_IV, serialized_login)
+            login_hex = binascii.hexlify(encrypted_login).decode()
+
+            login_url = "https://loginbp.common.ggbluefox.com/GetLoginData"
+            login_headers = headers.copy()
+            login_response = requests.post(login_url, data=bytes.fromhex(login_hex), headers=login_headers, verify=False)
+
+            nickname = ""
+            if login_response.status_code == 200:
+                try:
+                    login_info = login_pb2.LoginReq()
+                    login_info.ParseFromString(login_response.content)
+                    nickname = login_info.nickname
+                except Exception:
+                    nickname = ""
+
             example_msg = jwt_generator_pb2.Garena_420()
             example_msg.ParseFromString(response.content)
             response_dict = parse_response(str(example_msg))
 
             response_data = {
                 "accountId": login_res.account_id if login_res.account_id else "",
+                "nickname": nickname,
                 "lockRegion": login_res.lock_region if login_res.lock_region else "",
                 "notiRegion": login_res.noti_region if login_res.noti_region else "",
                 "ipRegion": login_res.ip_region if login_res.ip_region else "",
                 "agoraEnvironment": login_res.agora_environment if login_res.agora_environment else "",
-                "newActiveRegion": login_res.new_active_region if login_res.new_active_region else "",
-                "status": response_dict.get("status", "invalid"),
+                "tokenStatus": response_dict.get("status", "invalid"),
                 "token": response_dict.get("token", ""),
                 "ttl": login_res.ttl if login_res.ttl else 0,
                 "serverUrl": login_res.server_url if login_res.server_url else "",
