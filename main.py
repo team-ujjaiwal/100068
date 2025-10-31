@@ -92,7 +92,7 @@ def get_single_response():
             "message": "Wrong UID or Password. Please check and try again."
         }), 400
 
-    # Create MajorLogin object with proper structure
+    # Create MajorLogin object
     major_login = MajorLoginReq_pb2.MajorLogin()
     major_login.event_time = "2025-06-04 19:48:07"
     major_login.game_name = "free fire"
@@ -157,55 +157,54 @@ def get_single_response():
         encrypted_data = encrypt_message(AES_KEY, AES_IV, serialized_data)
         edata = binascii.hexlify(encrypted_data).decode()
 
-    url = "https://loginbp.common.ggbluefox.com/MajorLogin"
-    headers = {
-        'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-        'Connection': "Keep-Alive",
-        'Accept-Encoding': "gzip",
-        'Content-Type': "application/octet-stream",
-        'Expect': "100-continue",
-        'X-Unity-Version': "2018.4.11f1",
-        'X-GA': "v1 1",
-        'ReleaseVersion': "OB51"
-    }
-
-    response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)
-    
-    if response.status_code == 200:
-        # Parse the MajorLoginRes response
-        login_res = MajorLoginRes_pb2.MajorLoginRes()
-        login_res.ParseFromString(response.content)
-        
-        # Parse the Garena_420 response
-        example_msg = jwt_generator_pb2.Garena_420()
-        example_msg.ParseFromString(response.content)
-        response_dict = parse_response(str(example_msg))
-        
-        response_data = {
-            "accountId": login_res.account_id if login_res.account_id else "",
-            "lockRegion": login_res.lock_region if login_res.lock_region else "",
-            "notiRegion": login_res.noti_region if login_res.noti_region else "",
-            "ipRegion": login_res.ip_region if login_res.ip_region else "",
-            "agoraEnvironment": login_res.agora_environment if login_res.agora_environment else "",
-            "newActiveRegion": login_res.new_active_region if login_res.new_active_region else "",
-            "status": response_dict.get("status", "invalid"),
-            "token": response_dict.get("token", ""),
-            "ttl": login_res.ttl if login_res.ttl else 0,
-            "serverUrl": login_res.server_url if login_res.server_url else "",
-            "expireAt": int(time.time()) + (login_res.ttl if login_res.ttl else 0)
+        url = "https://loginbp.common.ggbluefox.com/MajorLogin"
+        headers = {
+            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+            'Connection': "Keep-Alive",
+            'Accept-Encoding': "gzip",
+            'Content-Type': "application/octet-stream",
+            'Expect': "100-continue",
+            'X-Unity-Version': "2018.4.11f1",
+            'X-GA': "v1 1",
+            'ReleaseVersion': "OB51"
         }
-        
-        return jsonify(response_data)
-    else:
+
+        response = requests.post(url, data=bytes.fromhex(edata), headers=headers, verify=False)
+
+        if response.status_code == 200:
+            login_res = MajorLoginRes_pb2.MajorLoginRes()
+            login_res.ParseFromString(response.content)
+
+            example_msg = jwt_generator_pb2.Garena_420()
+            example_msg.ParseFromString(response.content)
+            response_dict = parse_response(str(example_msg))
+
+            response_data = {
+                "accountId": login_res.account_id if login_res.account_id else "",
+                "lockRegion": login_res.lock_region if login_res.lock_region else "",
+                "notiRegion": login_res.noti_region if login_res.noti_region else "",
+                "ipRegion": login_res.ip_region if login_res.ip_region else "",
+                "agoraEnvironment": login_res.agora_environment if login_res.agora_environment else "",
+                "newActiveRegion": login_res.new_active_region if login_res.new_active_region else "",
+                "status": response_dict.get("status", "invalid"),
+                "token": response_dict.get("token", ""),
+                "ttl": login_res.ttl if login_res.ttl else 0,
+                "serverUrl": login_res.server_url if login_res.server_url else "",
+                "expireAt": int(time.time()) + (login_res.ttl if login_res.ttl else 0)
+            }
+
+            return jsonify(response_data)
+        else:
+            return jsonify({
+                "uid": uid,
+                "error": f"Failed to get response: HTTP {response.status_code}, {response.reason}"
+            }), 400
+
+    except Exception as e:
         return jsonify({
             "uid": uid,
-            "error": f"Failed to get response: HTTP {response.status_code}, {response.reason}"
-        }), 400
-except Exception as e:
-    return jsonify({
-        "uid": uid,
-        "error": f"Internal error occurred: {str(e)}"
-    }), 500
+            "error": f"Internal error occurred: {str(e)}"
+        }), 500
 
 
 if __name__ == '__main__':
