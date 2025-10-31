@@ -6,7 +6,6 @@ from Crypto.Util.Padding import pad
 import binascii
 import MajorLoginReq_pb2
 import MajorLoginRes_pb2
-import FieeFire_pb2
 import jwt_generator_pb2
 import json
 import time
