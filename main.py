@@ -176,27 +176,33 @@ def get_single_response():
             login_res = MajorLoginRes_pb2.MajorLoginRes()
             login_res.ParseFromString(response.content)
 
-            # GetLoginData call for nickname
+            # GetLoginData call to retrieve nickname, region, etc.
             login_req = login_pb2.LoginReq()
             login_req.account_id = login_res.account_id
-            login_req.region = login_res.lock_region
-
             serialized_login = login_req.SerializeToString()
             encrypted_login = encrypt_message(AES_KEY, AES_IV, serialized_login)
             login_hex = binascii.hexlify(encrypted_login).decode()
 
             login_url = "https://loginbp.common.ggbluefox.com/GetLoginData"
-            login_headers = headers.copy()
-            login_response = requests.post(login_url, data=bytes.fromhex(login_hex), headers=login_headers, verify=False)
+            login_response = requests.post(login_url, data=bytes.fromhex(login_hex), headers=headers, verify=False)
 
             nickname = ""
+            region = ""
+            level = 0
+            exp = 0
+            create_at = 0
+
             if login_response.status_code == 200:
                 try:
                     login_info = login_pb2.LoginReq()
                     login_info.ParseFromString(login_response.content)
                     nickname = login_info.nickname
+                    region = login_info.region
+                    level = login_info.level
+                    exp = login_info.exp
+                    create_at = login_info.create_at
                 except Exception:
-                    nickname = ""
+                    pass
 
             example_msg = jwt_generator_pb2.Garena_420()
             example_msg.ParseFromString(response.content)
@@ -205,6 +211,10 @@ def get_single_response():
             response_data = {
                 "accountId": login_res.account_id if login_res.account_id else "",
                 "nickname": nickname,
+                "region": region,
+                "level": level,
+                "exp": exp,
+                "createAt": create_at,
                 "lockRegion": login_res.lock_region if login_res.lock_region else "",
                 "notiRegion": login_res.noti_region if login_res.noti_region else "",
                 "ipRegion": login_res.ip_region if login_res.ip_region else "",
